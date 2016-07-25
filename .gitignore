@@ -1,0 +1,7 @@
+tmp/*
+*.*json
+*.pyc
+*.shp
+*.shx
+*.prj
+*.dbf

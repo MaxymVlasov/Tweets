@@ -1,0 +1,5 @@
+<RCC> 
+  <qresource prefix="/plugins/Tweets" > 
+    <file>icon.png</file> 
+  </qresource> 
+</RCC> 
