@@ -1,10 +1,11 @@
+# -*- coding: utf-8 -*-
 """
 /***************************************************************************
 Name			 	 : Search Geo Tweets
 Description          : This is work and extended analog of geotweet
-Date                 : 09/Jul/16 
+Date                 : 09/Jul/16
 copyright            : (C) 2016 by Maksym Vlasov
-email                : m.vlasov@post.com 
+email                : m.vlasov@post.com
  ***************************************************************************/
 
 /***************************************************************************
@@ -17,15 +18,26 @@ email                : m.vlasov@post.com
  ***************************************************************************/
  This script initializes the plugin, making it known to QGIS.
 """
-def name(): 
-  return "Search Geo Tweets" 
+
+
+def name():
+    return 'Search Geo Tweets'
+
+
 def description():
-  return "This is work and extended analog of geotweet"
-def version(): 
-  return "Version 0.1" 
+    return 'This is work and extended analog of geotweet'
+
+
+def version():
+    __version__ = '0.1'
+    return __version__
+
+
 def qgisMinimumVersion():
-  return "2.0"
-def classFactory(iface): 
-  # load Tweets class from file Tweets
-  from Tweets import Tweets 
-  return Tweets(iface)
+    return '2.0'
+
+
+def classFactory(iface):
+    # load Tweets class from file Tweets
+    from Tweets import Tweets
+    return Tweets(iface)
