@@ -25,9 +25,8 @@ from datetime import datetime
 from tweepy import Stream, OAuthHandler
 from tweepy.streaming import StreamListener
 # Import the PyQt and QGIS libraries
-from PyQt4.QtCore import QSettings, qVersion, QTranslator
 from PyQt4.QtGui import QIcon, QAction, QDockWidget
-from qgis.core import QCoreApplication, QgsMessageLog
+from qgis.core import QgsMessageLog
 import qgis.utils
 # Import the code for the dialog
 from TweetsDialog import TweetsDialog
@@ -47,44 +46,15 @@ class Tweets(object):
         self.iface = iface
         # initialize plugin directory
         self.plugin_dir = os.path.dirname(__file__)
-        # initialize locale
-        locale = QSettings().value('locale/userLocale')[0:2]
-        locale_path = os.path.join(
-            self.plugin_dir,
-            'i18n',
-            'Tweets_{}.qm'.format(locale))
 
-        if os.path.exists(locale_path):
-            self.translator = QTranslator()
-            self.translator.load(locale_path)
-
-            if qVersion() > '4.3.3':  # FIX ME http://vk.cc/5r9Onz
-                QCoreApplication.installTranslator(self.translator)
-
-        # Create the dialog (after translation) and keep reference
+        # Create the dialog and keep reference
         self.dlg = TweetsDialog()
 
         # Declare instance attributes
         self.actions = []
-        self.menu = self.tr(u'&Search GeoTweets')
-        # TODO: We are going to let the user set this up in a future iteration
+        self.menu = u'&Search GeoTweets'
         self.toolbar = self.iface.addToolBar(u'Tweets')
         self.toolbar.setObjectName(u'Tweets')
-
-    # noinspection PyMethodMayBeStatic
-    def tr(self, message):
-        """Get the translation for a string using Qt translation API.
-
-        We implement this ourselves since we do not inherit QObject.
-
-        :param message: String for translation.
-        :type message: str, QString
-
-        :returns: Translated version of message.
-        :rtype: QString
-        """
-
-        return QCoreApplication.translate('Tweets', message)
 
     def add_action(
             self,
@@ -127,7 +97,7 @@ class Tweets(object):
         icon_path = ':/plugins/Tweets/icon.png'
         self.add_action(
             icon_path,
-            text=self.tr(u'Run'),
+            text=u'Run',
             callback=self.run,
             parent=self.iface.mainWindow())
 
@@ -349,7 +319,7 @@ class Tweets(object):
                 if StreamAPI._geo_tweets == max_tweets:
                     if output_GeoJSON:
                         with open(file_name + '.geojson', 'a') as file:
-                            file.write('\n]}')
+                            file.write(']}')
                     if output_Shapefile:
                         shp.save(file_name)  # save the Shapefile
 
@@ -388,7 +358,7 @@ class Tweets(object):
         def save_file(output_GeoJSON, output_Shapefile, output_QGIS, shp):
             if output_GeoJSON:
                 with open(file_name + '.geojson', 'a') as f:
-                    f.write('\n]}')  # TODO: http://vk.cc/5raY2g
+                    f.write(']}')
             if output_Shapefile:
                 shp.save(file_name)  # save the Shapefile
 
