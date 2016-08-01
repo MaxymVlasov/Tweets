@@ -289,16 +289,14 @@ class Tweets(object):
                         json.dump(geo_tweet, f)
                         f.write(',')
                 if output_Shapefile:
-                    # access the GeoJSON tweet
-                    reader = json.loads(geo_tweet)
                     a = {}
-                    longitude = reader['geometry']['coordinates'][0]
-                    latitude = reader['geometry']['coordinates'][1]
+                    longitude = geo_tweet['geometry']['coordinates'][0]
+                    latitude = geo_tweet['geometry']['coordinates'][1]
                     QgsMessageLog.logMessage('geom', 'logs')
                     for field in fields:
-                        QgsMessageLog.logMessage(str({field: str(reader['properties'][field])
+                        QgsMessageLog.logMessage(str({field: str(geo_tweet['properties'][field])
                                                      .replace('\\', '').replace("u'", '').replace("'", '')}), 'logs')
-                        a.update({field: str(reader['properties'][field])
+                        a.update({field: str(geo_tweet['properties'][field])
                                  .replace('\\', '').replace("u'", '').replace("'", '')})
                     QgsMessageLog.logMessage('for', 'logs')
                     # create the point geometry
