@@ -20,7 +20,6 @@ email                : m.vlasov@post.com
 import os.path
 import json
 import shapefile
-import collections
 from datetime import datetime
 from tweepy import Stream, OAuthHandler
 from tweepy.streaming import StreamListener
@@ -113,7 +112,7 @@ class Tweets(object):
         del self.toolbar
 
     def run(self):
-        """Run method that performs all the real work"""  # TODO: rewrite docstring
+        """Run method that performed when run plugin"""
 
         # Create and show the dialog
         self.dlg.show
@@ -138,32 +137,37 @@ class Tweets(object):
             return False
 
         # Load new Twitter API keys
-        keys = dict()
-        keys['consumer_key'] = self.dlg.consumer_key.text()
-        keys['consumer_secret'] = self.dlg.consumer_key_secret.text()
-        keys['access_token'] = self.dlg.access_token.text()
-        keys['access_token_secret'] = self.dlg.access_token_secret.text()
+        keys = {
+            'consumer_key': self.dlg.consumer_key.text(),
+            'consumer_secret': self.dlg.consumer_key_secret.text(),
+            'access_token': self.dlg.access_token.text(),
+            'access_token_secret': self.dlg.access_token_secret.text(),
+        }
 
         # If have new Twitter API keys - Save
-        if (keys['consumer_key'] and keys['consumer_secret'] and
-           keys['access_token'] and keys['access_token_secret']):
-
-            with open(os.path.join(self.plugin_dir, 'keys.json'), 'w') as keys_file:
-                json.dump(keys, keys_file, indent=4)
-
-        # If haven't new & previous Twitter API keys - Stop
-        elif not all(keys.values()) and os.path.isfile('keys.json'):
-
-            warning_message = qgis.utils.iface.messageBar().createMessage(
-                'No Twitter API keys! Please, enter them and try again')
-            qgis.utils.iface.messageBar().pushWidget(
-                warning_message, qgis.utils.iface.messageBar().WARNING)
-            return False
+        try:
+            if (keys['consumer_key'] and keys['consumer_secret'] and
+               keys['access_token'] and keys['access_token_secret']):
+                with open(os.path.join(self.plugin_dir, 'keys.json'), 'w') as keys_file:
+                    json.dump(keys, keys_file)
+        except KeyError:
+            raise Exception('Keys not found')
 
         # Load previous Twitter API keys
         else:
-            with open(os.path.join(self.plugin_dir, 'keys.json'), 'r') as keys_file:
-                keys = json.load(keys_file)
+            try:
+                keys_ = keys.keys()
+                if not all(keys.values()) or not all(k in keys_ for k in
+                   ('consumer_key', 'consumer_secret', 'access_token', 'access_token_secret')):
+                    with open(os.path.join(self.plugin_dir, 'keys.json'), 'r') as keys_file:
+                        keys = json.load(keys_file)
+            # If haven't new & previous Twitter API keys - Stop
+            except IOError:
+                warning_message = qgis.utils.iface.messageBar().createMessage(
+                    'No Twitter API keys! Please, enter them and try again')
+                qgis.utils.iface.messageBar().pushWidget(
+                    warning_message, qgis.utils.iface.messageBar().WARNING)
+                return False
 
         # Get data & settings from UI
         keywords = [s.strip() for s in self.dlg.keywords.text().lower().split(',')]
@@ -204,8 +208,8 @@ class Tweets(object):
                     StreamAPI._requests = 0
                     StreamAPI._geo_tweets = 0
                     if output_GeoJSON:
-                        with open(file_name + '.geojson', 'w') as file:
-                            file.write('{"type":"FeatureCollection","features":[')
+                        with open(file_name + '.geojson', 'w') as f:
+                            f.write('{"type":"FeatureCollection","features":[')
                     if output_Shapefile:
                         shp = shapefile.Writer(shapefile.POINT)  # create a point shapefile
                         shp.autoBalance = 1  # for every record there must be a corresponding geometry
@@ -256,7 +260,7 @@ class Tweets(object):
                     else:
                         return True
 
-                geo_tweet = collections.OrderedDict({})
+                geo_tweet = {}
                 geo_tweet['type'] = 'Geotweet'
 
                 if not jdata['geo']:  # Place
@@ -270,7 +274,7 @@ class Tweets(object):
 
                 # Add metadata which user choose
                 if output_metadata == 'min':
-                    min_data = collections.OrderedDict({})
+                    min_data = {}
                     min_data['created_at'] = str(jdata['created_at'])
                     min_data['text'] = jdata['text']
                     geo_tweet['properties'] = min_data
@@ -281,9 +285,9 @@ class Tweets(object):
                     geo_tweet['properties'] = {}
 
                 if output_GeoJSON:
-                    with open(file_name + '.geojson', 'a') as file:
-                        json.dump(geo_tweet, file)
-                        file.write(',')
+                    with open(file_name + '.geojson', 'a') as f:
+                        json.dump(geo_tweet, f)
+                        f.write(',')
                 if output_Shapefile:
                     # access the GeoJSON tweet
                     reader = json.loads(geo_tweet)
@@ -318,8 +322,8 @@ class Tweets(object):
                 StreamAPI._geo_tweets += 1
                 if StreamAPI._geo_tweets == max_tweets:
                     if output_GeoJSON:
-                        with open(file_name + '.geojson', 'a') as file:
-                            file.write(']}')
+                        with open(file_name + '.geojson', 'a') as f:
+                            f.write(']}')
                     if output_Shapefile:
                         shp.save(file_name)  # save the Shapefile
 
@@ -368,8 +372,7 @@ class Tweets(object):
 
         start_time = datetime.now()
 
-        file_name = str(start_time)[:-7].replace(':', '-') + ' ' + str(keywords) + ' ' +\
-            output_metadata + ' ' + str(max_tweets)
+        file_name = ' '.join([str(start_time)[:-7].replace(':', '-'), str(keywords), output_metadata, str(max_tweets)])
         file_name = os.path.join(self.plugin_dir, 'Save files', file_name)
         # Start tweepy
         auth = OAuthHandler(keys['consumer_key'], keys['consumer_secret'])
