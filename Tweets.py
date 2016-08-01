@@ -23,7 +23,6 @@ import shapefile
 from datetime import datetime
 from tweepy import Stream, OAuthHandler
 from tweepy.streaming import StreamListener
-from keys import keys
 # Import the PyQt and QGIS libraries
 from PyQt4.QtCore import QSettings, qVersion, QTranslator
 from PyQt4.QtGui import QIcon, QAction, QDockWidget
@@ -168,24 +167,21 @@ class Tweets(object):
             return False
 
         # Load new Twitter API keys
-        CONSUMER_KEY = self.dlg.consumer_key.text()
-        CONSUMER_SECRET = self.dlg.consumer_key_secret.text()
-        ACCESS_TOKEN = self.dlg.access_token.text()
-        ACCESS_TOKEN_SECRET = self.dlg.access_token_secret.text()
+        keys = dict()
+        keys['consumer_key'] = self.dlg.consumer_key.text()
+        keys['consumer_secret'] = self.dlg.consumer_key_secret.text()
+        keys['access_token'] = self.dlg.access_token.text()
+        keys['access_token_secret'] = self.dlg.access_token_secret.text()
 
         # If have new Twitter API keys - Save
-        if (CONSUMER_KEY and CONSUMER_SECRET and
-           ACCESS_TOKEN and ACCESS_TOKEN_SECRET):
+        if (keys['consumer_key'] and keys['consumer_secret'] and
+           keys['access_token'] and keys['access_token_secret']):
 
-            with open(self.plugin_dir + '/keys.py', 'w') as keys_file:
-                keys_file.write("# -*- coding: utf-8 -*-\nkeys = dict(\n\
-                consumer_key='" + CONSUMER_KEY + "',\n\
-                consumer_secret='" + CONSUMER_SECRET + "',\n\
-                access_token='" + ACCESS_TOKEN + "',\n\
-                access_token_secret='" + ACCESS_TOKEN_SECRET + "',\n)")
+            with open(os.path.join(self.plugin_dir, 'keys.json'), 'w') as keys_file:
+                keys_file.write(json.dumps(keys))
 
         # If haven't new & previous Twitter API keys - Stop
-        elif not all(keys.values()):
+        elif not all(keys.values()) and os.path.isfile('keys.json'):
 
             warning_message = qgis.utils.iface.messageBar().createMessage(
                 'No Twitter API keys! Please, enter them and try again')
@@ -195,10 +191,8 @@ class Tweets(object):
 
         # Load previous Twitter API keys
         else:
-            CONSUMER_KEY = keys['consumer_key']
-            CONSUMER_SECRET = keys['consumer_secret']
-            ACCESS_TOKEN = keys['access_token']
-            ACCESS_TOKEN_SECRET = keys['access_token_secret']
+            with open(os.path.join(self.plugin_dir, 'keys.json'), 'r') as keys_file:
+                keys = json.load(keys_file)
 
         # Get data & settings from UI
         keywords = self.dlg.keywords.text().lower().replace(', ', ',').split(',')
@@ -397,8 +391,8 @@ class Tweets(object):
         start_time = datetime.now()
         file_name = str(self.plugin_dir) + '/Save files/' + str(start_time)[:-7].replace(':', '-')
         # Start tweepy
-        auth = OAuthHandler(CONSUMER_KEY, CONSUMER_SECRET)
-        auth.set_access_token(ACCESS_TOKEN, ACCESS_TOKEN_SECRET)
+        auth = OAuthHandler(keys['consumer_key'], keys['consumer_secret'])
+        auth.set_access_token(keys['access_token'], keys['access_token_secret'])
 
         if search_method == 'Realtime (Streaming API)':
             stream = Stream(auth, StreamAPI())
