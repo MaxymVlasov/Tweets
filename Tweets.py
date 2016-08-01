@@ -23,11 +23,9 @@ import shapefile
 from datetime import datetime
 from tweepy import Stream, OAuthHandler
 from tweepy.streaming import StreamListener
-from keys import keys
 # Import the PyQt and QGIS libraries
-from PyQt4.QtCore import QSettings, qVersion, QTranslator
 from PyQt4.QtGui import QIcon, QAction, QDockWidget
-from qgis.core import QCoreApplication, QgsMessageLog
+from qgis.core import QgsMessageLog
 import qgis.utils
 # Import the code for the dialog
 from TweetsDialog import TweetsDialog
@@ -36,7 +34,7 @@ from TweetsDialog import TweetsDialog
 class Tweets(object):
 
     def __init__(self, iface):
-        """Constructor.
+        """Initianizer.
 
         :param iface: An interface instance that will be passed to this class
                 which provides the hook by which you can manipulate the QGIS
@@ -47,44 +45,15 @@ class Tweets(object):
         self.iface = iface
         # initialize plugin directory
         self.plugin_dir = os.path.dirname(__file__)
-        # initialize locale
-        locale = QSettings().value('locale/userLocale')[0:2]
-        locale_path = os.path.join(
-            self.plugin_dir,
-            'i18n',
-            'Tweets_{}.qm'.format(locale))
 
-        if os.path.exists(locale_path):
-            self.translator = QTranslator()
-            self.translator.load(locale_path)
-
-            if qVersion() > '4.3.3':  # FIX ME http://vk.cc/5r9Onz
-                QCoreApplication.installTranslator(self.translator)
-
-        # Create the dialog (after translation) and keep reference
+        # Create the dialog and keep reference
         self.dlg = TweetsDialog()
 
         # Declare instance attributes
         self.actions = []
-        self.menu = self.tr(u'&Search GeoTweets')
-        # TODO: We are going to let the user set this up in a future iteration
+        self.menu = u'&Search GeoTweets'
         self.toolbar = self.iface.addToolBar(u'Tweets')
         self.toolbar.setObjectName(u'Tweets')
-
-    # noinspection PyMethodMayBeStatic
-    def tr(self, message):
-        """Get the translation for a string using Qt translation API.
-
-        We implement this ourselves since we do not inherit QObject.
-
-        :param message: String for translation.
-        :type message: str, QString
-
-        :returns: Translated version of message.
-        :rtype: QString
-        """
-
-        return QCoreApplication.translate('Tweets', message)
 
     def add_action(
             self,
@@ -127,7 +96,7 @@ class Tweets(object):
         icon_path = ':/plugins/Tweets/icon.png'
         self.add_action(
             icon_path,
-            text=self.tr(u'Run'),
+            text=u'Run',
             callback=self.run,
             parent=self.iface.mainWindow())
 
@@ -136,14 +105,14 @@ class Tweets(object):
 
         for action in self.actions:
             self.iface.removePluginWebMenu(
-                self.tr(u'&Tweets'),
+                u'&Tweets',
                 action)
             self.iface.removeToolBarIcon(action)
 
         del self.toolbar
 
     def run(self):
-        """Run method that performs all the real work"""  # TODO: rewrite docstring
+        """Run method that performed when run plugin"""
 
         # Create and show the dialog
         self.dlg.show
@@ -168,40 +137,40 @@ class Tweets(object):
             return False
 
         # Load new Twitter API keys
-        CONSUMER_KEY = self.dlg.consumer_key.text()
-        CONSUMER_SECRET = self.dlg.consumer_key_secret.text()
-        ACCESS_TOKEN = self.dlg.access_token.text()
-        ACCESS_TOKEN_SECRET = self.dlg.access_token_secret.text()
+        keys = {
+            'consumer_key': self.dlg.consumer_key.text(),
+            'consumer_secret': self.dlg.consumer_key_secret.text(),
+            'access_token': self.dlg.access_token.text(),
+            'access_token_secret': self.dlg.access_token_secret.text(),
+        }
 
         # If have new Twitter API keys - Save
-        if (CONSUMER_KEY and CONSUMER_SECRET and
-           ACCESS_TOKEN and ACCESS_TOKEN_SECRET):
-
-            with open(self.plugin_dir + '/keys.py', 'w') as keys_file:
-                keys_file.write("# -*- coding: utf-8 -*-\nkeys = dict(\n\
-                consumer_key='" + CONSUMER_KEY + "',\n\
-                consumer_secret='" + CONSUMER_SECRET + "',\n\
-                access_token='" + ACCESS_TOKEN + "',\n\
-                access_token_secret='" + ACCESS_TOKEN_SECRET + "',\n)")
-
-        # If haven't new & previous Twitter API keys - Stop
-        elif not all(keys.values()):
-
-            warning_message = qgis.utils.iface.messageBar().createMessage(
-                'No Twitter API keys! Please, enter them and try again')
-            qgis.utils.iface.messageBar().pushWidget(
-                warning_message, qgis.utils.iface.messageBar().WARNING)
-            return False
+        try:
+            if (keys['consumer_key'] and keys['consumer_secret'] and
+               keys['access_token'] and keys['access_token_secret']):
+                with open(os.path.join(self.plugin_dir, 'keys.json'), 'w') as keys_file:
+                    json.dump(keys, keys_file)
+        except KeyError:
+            raise Exception('Keys not found')
 
         # Load previous Twitter API keys
         else:
-            CONSUMER_KEY = keys['consumer_key']
-            CONSUMER_SECRET = keys['consumer_secret']
-            ACCESS_TOKEN = keys['access_token']
-            ACCESS_TOKEN_SECRET = keys['access_token_secret']
+            try:
+                keys_ = keys.keys()
+                if not all(keys.values()) or not all(k in keys_ for k in
+                   ('consumer_key', 'consumer_secret', 'access_token', 'access_token_secret')):
+                    with open(os.path.join(self.plugin_dir, 'keys.json'), 'r') as keys_file:
+                        keys = json.load(keys_file)
+            # If haven't new & previous Twitter API keys - Stop
+            except IOError:
+                warning_message = qgis.utils.iface.messageBar().createMessage(
+                    'No Twitter API keys! Please, enter them and try again')
+                qgis.utils.iface.messageBar().pushWidget(
+                    warning_message, qgis.utils.iface.messageBar().WARNING)
+                return False
 
         # Get data & settings from UI
-        keywords = self.dlg.keywords.text().lower().replace(', ', ',').split(',')
+        keywords = [s.strip() for s in self.dlg.keywords.text().lower().split(',')]
         max_tweets = self.dlg.nmbr_tweets.value()
 
         stop_time = False
@@ -221,7 +190,12 @@ class Tweets(object):
                      self.dlg.location_lat_to.value()]
 
         search_method = self.dlg.search_method.currentText()
-        output_metadata = self.dlg.output_metadata.currentText()
+        metadata = {
+            'All (need more RAM / big files)': 'all',
+            'Minimum (created_at, text, coordinates)': 'min',
+            'None - Only coordinates': 'none',
+        }
+        output_metadata = metadata[self.dlg.output_metadata.currentText()]
 
         output_GeoJSON = self.dlg.output_file_GeoJSON.isChecked()
         output_Shapefile = self.dlg.output_file_Shapefile.isChecked()
@@ -234,16 +208,16 @@ class Tweets(object):
                     StreamAPI._requests = 0
                     StreamAPI._geo_tweets = 0
                     if output_GeoJSON:
-                        with open(file_name + '.geojson', 'w') as file:
-                            file.write('{"type":"FeatureCollection","features":[')
+                        with open(file_name + '.geojson', 'w') as f:
+                            f.write('{"type":"FeatureCollection","features":[')
                     if output_Shapefile:
                         shp = shapefile.Writer(shapefile.POINT)  # create a point shapefile
                         shp.autoBalance = 1  # for every record there must be a corresponding geometry
 
                         # create the fields names and data type for each.
-                        if output_metadata == 'Minimum (created_at, text, coordinates)':
+                        if output_metadata == 'min':
                             fields = ['created_at', 'text']
-                        elif output_metadata == 'All (need more RAM / big files)':
+                        elif output_metadata == 'all':
                             fields = [
                                 'created_at', 'id', 'id_str', 'text', 'source', 'truncated',
                                 'in_reply_to_status_id', 'in_reply_to_status_id_str',
@@ -252,7 +226,7 @@ class Tweets(object):
                                 'place', 'contributors', 'is_quote_status', 'retweet_count',
                                 'favorite_count', 'entities', 'favorited', 'retweeted',
                                 'filter_level', 'lang', 'timestamp_ms']
-                        elif output_metadata == 'None - Only coordinates':
+                        elif output_metadata == 'none':
                             fields = []
 
                         for field in fields:
@@ -285,52 +259,52 @@ class Tweets(object):
                         break
                     else:
                         return True
-                # TODO: http://vk.cc/5raROT
-                geo_tweet = '\n\t{ "type": "Geotweet", \n\t\t"geometry":\n\t\t\t'
+
+                geo_tweet = {}
+                geo_tweet['type'] = 'Geotweet'
+
                 if not jdata['geo']:  # Place
                     # Change Polygon to Point
                     coordinates = jdata['place']['bounding_box']['coordinates'][0]
                     lon = (coordinates[0][0] + coordinates[2][0]) / 2
                     lat = (coordinates[0][1] + coordinates[2][1]) / 2
-                    geo_tweet += '{"type": "Point", "coordinates": [' + str(lon) + ', ' + str(lat) + ']}'
+                    geo_tweet['geometry'] = {'type': 'Point', 'coordinates': [lon, lat]}
                 else:  # Geo
-                    geo_tweet += str(jdata['geo']).replace("u'", '"').replace("'", '"')
+                    geo_tweet['geometry'] = jdata['geo']
 
                 # Add metadata which user choose
-                geo_tweet += ',\n\t\t"properties": \n\t\t\t'
-                if output_metadata == 'Minimum (created_at, text, coordinates)':
-                    min_data = '"created_at":"' + str(jdata['created_at']) + '",' + \
-                                '"text":"' + str(jdata['text'].encode('utf-8'))\
-                                .replace('"', "'").replace('\\', '\\\\') + '"'  # crutch-escape characters
-                    geo_tweet += '{' + min_data + '}\n'
-                elif output_metadata == 'All (need more RAM / big files)':
-                    geo_tweet += data
-                elif output_metadata == 'None - Only coordinates':
-                    geo_tweet += '{}'
-                geo_tweet += '\t}'
+                if output_metadata == 'min':
+                    min_data = {}
+                    min_data['created_at'] = str(jdata['created_at'])
+                    min_data['text'] = jdata['text']
+                    geo_tweet['properties'] = min_data
+                elif output_metadata == 'all':
+                    geo_tweet['properties'] = jdata
+
+                elif output_metadata == 'none':
+                    geo_tweet['properties'] = {}
 
                 if output_GeoJSON:
-                    with open(file_name + '.geojson', 'a') as file:
-                        file.write(geo_tweet + ',')
+                    with open(file_name + '.geojson', 'a') as f:
+                        json.dump(geo_tweet, f)
+                        f.write(',')
                 if output_Shapefile:
-                    # access the GeoJSON tweet
-                    reader = json.loads(geo_tweet)
                     a = {}
-                    longitude = reader['geometry']['coordinates'][0]
-                    latitude = reader['geometry']['coordinates'][1]
+                    longitude = geo_tweet['geometry']['coordinates'][0]
+                    latitude = geo_tweet['geometry']['coordinates'][1]
                     QgsMessageLog.logMessage('geom', 'logs')
                     for field in fields:
-                        QgsMessageLog.logMessage(str({field: str(reader['properties'][field])
+                        QgsMessageLog.logMessage(str({field: str(geo_tweet['properties'][field])
                                                      .replace('\\', '').replace("u'", '').replace("'", '')}), 'logs')
-                        a.update({field: str(reader['properties'][field])
+                        a.update({field: str(geo_tweet['properties'][field])
                                  .replace('\\', '').replace("u'", '').replace("'", '')})
                     QgsMessageLog.logMessage('for', 'logs')
                     # create the point geometry
                     shp.point(float(longitude), float(latitude))
                     # add attribute data
-                    if output_metadata == 'Minimum (created_at, text, coordinates)':
+                    if output_metadata == 'min':
                         shp.record(a['created_at'], a['text'])
-                    elif output_metadata == 'All (need more RAM / big files)':
+                    elif output_metadata == 'all':
                         shp.record(
                             a['created_at'], a['id'], a['id_str'], a['text'], a['source'], a['truncated'],
                             a['in_reply_to_status_id'], a['in_reply_to_status_id_str'],
@@ -340,14 +314,14 @@ class Tweets(object):
                             a['favorite_count'], a['entities'], a['favorited'], a['retweeted'],
                             a['filter_level'], a['lang'], a['timestamp_ms']
                             )
-                    elif output_metadata == 'None - Only coordinates':
+                    elif output_metadata == 'none':
                         shp.record()
 
                 StreamAPI._geo_tweets += 1
                 if StreamAPI._geo_tweets == max_tweets:
                     if output_GeoJSON:
-                        with open(file_name + '.geojson', 'a') as file:
-                            file.write('\n]}')
+                        with open(file_name + '.geojson', 'a') as f:
+                            f.write(']}')
                     if output_Shapefile:
                         shp.save(file_name)  # save the Shapefile
 
@@ -385,20 +359,22 @@ class Tweets(object):
 
         def save_file(output_GeoJSON, output_Shapefile, output_QGIS, shp):
             if output_GeoJSON:
-                open(file_name + '.geojson', 'a').write('\n]}')  # TODO: http://vk.cc/5raY2g
+                with open(file_name + '.geojson', 'a') as f:
+                    f.write(']}')
             if output_Shapefile:
                 shp.save(file_name)  # save the Shapefile
 
-                prj = open(file_name + '.prj', 'w')  # create the .prj file
-                epsg = getWKT_PRJ('4326')  # call the function and supply the epsg code
-                prj.write(epsg)
-                prj.close()
+                with open(file_name + '.prj', 'w') as prj:  # create the .prj file
+                    epsg = getWKT_PRJ('4326')  # call the function and supply the epsg code
+                    prj.write(epsg)
 
         start_time = datetime.now()
-        file_name = str(self.plugin_dir) + '/Save files/' + str(start_time)[:-7].replace(':', '-')
+
+        file_name = ' '.join([str(start_time)[:-7].replace(':', '-'), str(keywords), output_metadata, str(max_tweets)])
+        file_name = os.path.join(self.plugin_dir, 'Save files', file_name)
         # Start tweepy
-        auth = OAuthHandler(CONSUMER_KEY, CONSUMER_SECRET)
-        auth.set_access_token(ACCESS_TOKEN, ACCESS_TOKEN_SECRET)
+        auth = OAuthHandler(keys['consumer_key'], keys['consumer_secret'])
+        auth.set_access_token(keys['access_token'], keys['access_token_secret'])
 
         if search_method == 'Realtime (Streaming API)':
             stream = Stream(auth, StreamAPI())
