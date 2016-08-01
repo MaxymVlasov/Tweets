@@ -20,6 +20,7 @@ email                : m.vlasov@post.com
 import os.path
 import json
 import shapefile
+import collections
 from datetime import datetime
 from tweepy import Stream, OAuthHandler
 from tweepy.streaming import StreamListener
@@ -35,7 +36,7 @@ from TweetsDialog import TweetsDialog
 class Tweets(object):
 
     def __init__(self, iface):
-        """Constructor.
+        """Initianizer.
 
         :param iface: An interface instance that will be passed to this class
                 which provides the hook by which you can manipulate the QGIS
@@ -178,7 +179,7 @@ class Tweets(object):
            keys['access_token'] and keys['access_token_secret']):
 
             with open(os.path.join(self.plugin_dir, 'keys.json'), 'w') as keys_file:
-                keys_file.write(json.dumps(keys))
+                json.dump(keys, keys_file, indent=4)
 
         # If haven't new & previous Twitter API keys - Stop
         elif not all(keys.values()) and os.path.isfile('keys.json'):
@@ -195,7 +196,7 @@ class Tweets(object):
                 keys = json.load(keys_file)
 
         # Get data & settings from UI
-        keywords = self.dlg.keywords.text().lower().replace(', ', ',').split(',')
+        keywords = [s.strip() for s in self.dlg.keywords.text().lower().split(',')]
         max_tweets = self.dlg.nmbr_tweets.value()
 
         stop_time = False
@@ -215,7 +216,12 @@ class Tweets(object):
                      self.dlg.location_lat_to.value()]
 
         search_method = self.dlg.search_method.currentText()
-        output_metadata = self.dlg.output_metadata.currentText()
+        metadata = {
+            'All (need more RAM / big files)': 'all',
+            'Minimum (created_at, text, coordinates)': 'min',
+            'None - Only coordinates': 'none',
+        }
+        output_metadata = metadata[self.dlg.output_metadata.currentText()]
 
         output_GeoJSON = self.dlg.output_file_GeoJSON.isChecked()
         output_Shapefile = self.dlg.output_file_Shapefile.isChecked()
@@ -235,9 +241,9 @@ class Tweets(object):
                         shp.autoBalance = 1  # for every record there must be a corresponding geometry
 
                         # create the fields names and data type for each.
-                        if output_metadata == 'Minimum (created_at, text, coordinates)':
+                        if output_metadata == 'min':
                             fields = ['created_at', 'text']
-                        elif output_metadata == 'All (need more RAM / big files)':
+                        elif output_metadata == 'all':
                             fields = [
                                 'created_at', 'id', 'id_str', 'text', 'source', 'truncated',
                                 'in_reply_to_status_id', 'in_reply_to_status_id_str',
@@ -246,7 +252,7 @@ class Tweets(object):
                                 'place', 'contributors', 'is_quote_status', 'retweet_count',
                                 'favorite_count', 'entities', 'favorited', 'retweeted',
                                 'filter_level', 'lang', 'timestamp_ms']
-                        elif output_metadata == 'None - Only coordinates':
+                        elif output_metadata == 'none':
                             fields = []
 
                         for field in fields:
@@ -279,33 +285,35 @@ class Tweets(object):
                         break
                     else:
                         return True
-                # TODO: http://vk.cc/5raROT
-                geo_tweet = '\n\t{ "type": "Geotweet", \n\t\t"geometry":\n\t\t\t'
+
+                geo_tweet = collections.OrderedDict({})
+                geo_tweet['type'] = 'Geotweet'
+
                 if not jdata['geo']:  # Place
                     # Change Polygon to Point
                     coordinates = jdata['place']['bounding_box']['coordinates'][0]
                     lon = (coordinates[0][0] + coordinates[2][0]) / 2
                     lat = (coordinates[0][1] + coordinates[2][1]) / 2
-                    geo_tweet += '{"type": "Point", "coordinates": [' + str(lon) + ', ' + str(lat) + ']}'
+                    geo_tweet['geometry'] = {'type': 'Point', 'coordinates': [lon, lat]}
                 else:  # Geo
-                    geo_tweet += str(jdata['geo']).replace("u'", '"').replace("'", '"')
+                    geo_tweet['geometry'] = jdata['geo']
 
                 # Add metadata which user choose
-                geo_tweet += ',\n\t\t"properties": \n\t\t\t'
-                if output_metadata == 'Minimum (created_at, text, coordinates)':
-                    min_data = '"created_at":"' + str(jdata['created_at']) + '",' + \
-                                '"text":"' + str(jdata['text'].encode('utf-8'))\
-                                .replace('"', "'").replace('\\', '\\\\') + '"'  # crutch-escape characters
-                    geo_tweet += '{' + min_data + '}\n'
-                elif output_metadata == 'All (need more RAM / big files)':
-                    geo_tweet += data
-                elif output_metadata == 'None - Only coordinates':
-                    geo_tweet += '{}'
-                geo_tweet += '\t}'
+                if output_metadata == 'min':
+                    min_data = collections.OrderedDict({})
+                    min_data['created_at'] = str(jdata['created_at'])
+                    min_data['text'] = jdata['text']
+                    geo_tweet['properties'] = min_data
+                elif output_metadata == 'all':
+                    geo_tweet['properties'] = jdata
+
+                elif output_metadata == 'none':
+                    geo_tweet['properties'] = {}
 
                 if output_GeoJSON:
                     with open(file_name + '.geojson', 'a') as file:
-                        file.write(geo_tweet + ',')
+                        json.dump(geo_tweet, file)
+                        file.write(',')
                 if output_Shapefile:
                     # access the GeoJSON tweet
                     reader = json.loads(geo_tweet)
@@ -322,9 +330,9 @@ class Tweets(object):
                     # create the point geometry
                     shp.point(float(longitude), float(latitude))
                     # add attribute data
-                    if output_metadata == 'Minimum (created_at, text, coordinates)':
+                    if output_metadata == 'min':
                         shp.record(a['created_at'], a['text'])
-                    elif output_metadata == 'All (need more RAM / big files)':
+                    elif output_metadata == 'all':
                         shp.record(
                             a['created_at'], a['id'], a['id_str'], a['text'], a['source'], a['truncated'],
                             a['in_reply_to_status_id'], a['in_reply_to_status_id_str'],
@@ -334,7 +342,7 @@ class Tweets(object):
                             a['favorite_count'], a['entities'], a['favorited'], a['retweeted'],
                             a['filter_level'], a['lang'], a['timestamp_ms']
                             )
-                    elif output_metadata == 'None - Only coordinates':
+                    elif output_metadata == 'none':
                         shp.record()
 
                 StreamAPI._geo_tweets += 1
@@ -379,17 +387,20 @@ class Tweets(object):
 
         def save_file(output_GeoJSON, output_Shapefile, output_QGIS, shp):
             if output_GeoJSON:
-                open(file_name + '.geojson', 'a').write('\n]}')  # TODO: http://vk.cc/5raY2g
+                with open(file_name + '.geojson', 'a') as f:
+                    f.write('\n]}')  # TODO: http://vk.cc/5raY2g
             if output_Shapefile:
                 shp.save(file_name)  # save the Shapefile
 
-                prj = open(file_name + '.prj', 'w')  # create the .prj file
-                epsg = getWKT_PRJ('4326')  # call the function and supply the epsg code
-                prj.write(epsg)
-                prj.close()
+                with open(file_name + '.prj', 'w') as prj:  # create the .prj file
+                    epsg = getWKT_PRJ('4326')  # call the function and supply the epsg code
+                    prj.write(epsg)
 
         start_time = datetime.now()
-        file_name = str(self.plugin_dir) + '/Save files/' + str(start_time)[:-7].replace(':', '-')
+
+        file_name = str(start_time)[:-7].replace(':', '-') + ' ' + str(keywords) + ' ' +\
+            output_metadata + ' ' + str(max_tweets)
+        file_name = os.path.join(self.plugin_dir, 'Save files', file_name)
         # Start tweepy
         auth = OAuthHandler(keys['consumer_key'], keys['consumer_secret'])
         auth.set_access_token(keys['access_token'], keys['access_token_secret'])
