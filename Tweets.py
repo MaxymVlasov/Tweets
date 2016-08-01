@@ -106,7 +106,7 @@ class Tweets(object):
 
         for action in self.actions:
             self.iface.removePluginWebMenu(
-                self.tr(u'&Tweets'),
+                u'&Tweets',
                 action)
             self.iface.removeToolBarIcon(action)
 
